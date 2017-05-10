@@ -11,7 +11,7 @@ In terms of AWS ecosystem, it seems to fit in a the use case of ad-hoc querying 
  - **Tables** - Tables are essentially metadata that describes your data similar to traditional database tables. One important difference is that there is no relational construct.
 
 
- - **Databases** - Alogical grouping of tables. Also know as catalog or a namespace.
+ - **Databases** - A logical grouping of tables. Also know as catalog or a namespace.
  
  - **SerDe** - Serializer/Deserializer, which are libraries that tell Hive how to interpret data formats. Athena uses SerDes to interpret the data read from Amazon S3. The following SerDes are supported
      - Apache Web Logs: "org.apache.hadoop.hive.serde2.RegexSerDe"
@@ -49,15 +49,15 @@ In terms of AWS ecosystem, it seems to fit in a the use case of ad-hoc querying 
  
  -  As with most things, you can mix and match AWS services based on your workloads. One possibility is to use an on-demand EMR cluster to process data and dump results to S3. Then use Athena to create adhoc tables and run reports. 
  
- - “Facebook uses Presto for interactive queries against several internal data stores, including their 300PB data warehouse. Over 1,000 Facebook employees use Presto daily to run more than 30,000 queries that in total scan over a petabyte each per day” Source : [https://prestodb.io/]()
+ - “Facebook uses Presto for interactive queries against several internal data stores, including their 300PB data warehouse. Over 1,000 Facebook employees use Presto daily to run more than 30,000 queries that in total scan over a petabyte each per day” Source : [https://prestodb.io/]()
 
 
 ## Limitations
  
  - There is no support for transactions. This includes any transactions found in Hive or Presto.
   
- - Athena table names cannot contain special characters, other than underscore (_).
- 
+ - Athena table names cannot contain special characters, other than underscore (\_).
+
  - There are also service limits, some of which can be increased by raising it with AWS
      - You can only submit one query at a time and you can only have 5 (five) concurrent queries at one time per account.
      - Query timeout: 30 minutes
@@ -73,11 +73,10 @@ In terms of AWS ecosystem, it seems to fit in a the use case of ad-hoc querying 
 
 You can use the console to click through the web form to create databases and tables. This part is fairly intuitive. In this example, let's look at doing the same with query editor.
 
- - Download the CSV sample file or clone the git repository
+  - Download the CSV sample file or clone the git repository
  
  ```
  wget https://github.com/srirajan/athena/blob/master/sample_data/company_funding.csv
- 
  ```
  or
  
@@ -85,17 +84,24 @@ You can use the console to click through the web form to create databases and ta
  git clone https://github.com/srirajan/athena
  ```
  
- - Load the data files on your S3 bucket. You can create a single S3 bucket and sub folders under it. You will need the S3 URL in the examples below.
+  - Load the data files on your S3 bucket. You can create a single S3 bucket and sub folders under it. You will need the S3 URL in the examples below.
+
+ ```
+ cd athena
+ aws s3 mb s3://athena-playground-1234
+ aws s3 sync . s3://athena-playground-1234 --exclude=".git/*"
+ ```
  
- - Now, login to the AWS console and go the Athena section. 
+  - Now, login to the AWS console and go the Athena section. 
  
- - Then in the Query editor, create the database using the following.
+  - Then in the Query editor, create the database using the following.
  
  ```
  CREATE DATABASE sampledata;
  ```
  
- - Create the table. Note, you don't need to specify the file name. It automatically picks the CSV files under that folder.  The same logic applies if you have partitioned the data into sub folders. If you have partitioned the data, then you need to create table with the partition information as well.
+  - Create the table. Replace the LOCATION with the name of the bucket you created earlier.
+  Note: you don't need to specify the file name. It automatically picks the CSV files under that folder.  The same logic applies if you have partitioned the data into sub folders. If you have partitioned the data, then you need to create table with the partition information as well.
  
  ```
 CREATE EXTERNAL TABLE IF NOT EXISTS sampledata.companyfunding (
@@ -115,10 +121,10 @@ WITH SERDEPROPERTIES (
   'serialization.format' = ',',
   'field.delim' = ','
 ) 
-LOCATION 's3://aws-athena-data-jfj28fj3lt05kg84kkdj444/company_funding/';
+LOCATION 's3://athena-playground-1234/sampledata/company_funding';
  ```
 
- - Run a query
+  - Run a query
  
   ```
  SELECT * from sampledata.companyfunding LIMIT 20;
@@ -136,17 +142,30 @@ WITH SERDEPROPERTIES (
   'serialization.format' = ',',
   'field.delim' = ','
 ) 
-LOCATION 's3://aws-athena-data-jfj28fj3lt05kg84kkdj444/company_funding/';
+LOCATION 's3://athena-playground-1234/sampledata/company_funding';
  ```
 
     
-- Run a query to find top 5 funded companies
+  - Run a query to find top 5 funded companies
 
 ```
 SELECT * from sampledata.companyfundingsmall ORDER BY raisedAmt DESC LIMIT 5;
 ```
+
+  - Or you could just do this in the SQL expression on our original table
+
+```
+SELECT company,raisedamt from sampledata.companyfunding ORDER BY raisedAmt DESC LIMIT 5;
+```
+  - The former expression after we created a table from a smaller subset of data helps optimise the data we need to scan and with Athena that's important as you pay per GB of data scanned
  
- -  Now, let's load a larger data set. The data source covers  over a billion Taxi trips  in New York City from 2014 and 2015. The source of data is [https://github.com/fivethirtyeight/uber-tlc-foil-response/tree/master/uber-trip-data](). The total size on disk is about 190GB. Note, Athena will report larger sizes because of how it manages the tables on top of S3. 
+  -  Now, let's load a larger data set. The data source covers  over a billion Taxi trips  in New York City from 2014 and 2015. The source of data is [https://github.com/fivethirtyeight/uber-tlc-foil-response/tree/master/uber-trip-data](). The total size on disk is about 190GB. Note, Athena will report larger sizes because of how it manages the tables on top of S3. 
+
+  - Clone the repo and upload the data
+```
+git clone https://github.com/fivethirtyeight/uber-tlc-foil-response && cd uber-tlc-foil-response
+aws s3 sync uber-trip-data s3://athena-playground-1234/uber-trip-data --exclude=".git/*"
+```
    
 ```
   CREATE EXTERNAL TABLE sampledata.taxi (
@@ -169,7 +188,7 @@ SELECT * from sampledata.companyfundingsmall ORDER BY raisedAmt DESC LIMIT 5;
   Tolls_Amt FLOAT,
   Total_Amt FLOAT
   ) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-  LOCATION 's3://aws-athena-data-jfj28fj3lt05kg84kkdj444/taxi/';
+  LOCATION 's3://athena-playground-1234/uber-trip-data/';
 ```
   
  - Let's run a query that scans a large amount of this data.  In my experiences, the following queries finish in under 40 seconds and scans about 200G of data
